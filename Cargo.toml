@@ -1,0 +1,16 @@
+[package]
+name = "data_analysis"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+csv = "1.3"
+fin-primitives = "2.12"
+ndarray = { version = "0.16", features = ["serde"] }
+smartcore = "0.5"
+plotters = { version = "0.3", default-features = false, features = ["svg_backend", "line_series", "point_series"] }
+plotly = "0.14"
+serde = { version = "1", features = ["derive"] }
+chrono = "0.4"
+rust_decimal = "1"
+rust_decimal_macros = "1"
