@@ -15,6 +15,14 @@ pub fn train_random_forest(
     labels: &[i32],
     _n_trees: u32,
 ) -> TrainedModel {
+    assert!(
+        features.len() == labels.len(),
+        "特征和标签数量不匹配: features={}, labels={}",
+        features.len(),
+        labels.len()
+    );
+    assert!(!features.is_empty(), "训练数据为空");
+
     let start = Instant::now();
 
     let features_vec: Vec<Vec<f64>> = features.to_vec();

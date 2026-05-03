@@ -16,9 +16,23 @@ pub fn predict_batch(
     if features.is_empty() {
         return vec![];
     }
+    assert!(
+        labels.len() == features.len(),
+        "预测特征和标签数量不匹配: features={}, labels={}",
+        features.len(),
+        labels.len()
+    );
+
     let features_vec: Vec<Vec<f64>> = features.to_vec();
     let x = DenseMatrix::from_2d_vec(&features_vec).expect("构建特征矩阵失败");
     let preds = model.predict(&x).expect("预测失败");
+
+    assert!(
+        preds.len() == features.len(),
+        "预测结果数量与特征数量不匹配: preds={}, features={}",
+        preds.len(),
+        features.len()
+    );
 
     features
         .iter()

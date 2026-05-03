@@ -44,10 +44,16 @@ impl FeatureBuilder {
     }
 
     pub fn take_features(&self) -> Vec<Vec<f64>> {
+        debug_assert_eq!(self.features.len(), self.labels.len(),
+            "特征({})和标签({})数量不一致",
+            self.features.len(), self.labels.len());
         self.features.clone()
     }
 
     pub fn take_labels(&self) -> Vec<i32> {
+        debug_assert_eq!(self.features.len(), self.labels.len(),
+            "特征({})和标签({})数量不一致",
+            self.features.len(), self.labels.len());
         self.labels.clone()
     }
 }
