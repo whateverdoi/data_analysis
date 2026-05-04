@@ -1,6 +1,5 @@
 use smartcore::{
-    ensemble::random_forest_classifier::RandomForestClassifier,
-    linalg::basic::matrix::DenseMatrix,
+    ensemble::random_forest_classifier::RandomForestClassifier, linalg::basic::matrix::DenseMatrix,
 };
 
 pub struct Prediction {

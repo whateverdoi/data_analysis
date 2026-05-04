@@ -36,9 +36,21 @@ pub fn evaluate(
         .filter(|p| p.actual == Some(0) && p.predicted == 0)
         .count();
 
-    let accuracy = if total > 0 { correct as f64 / total as f64 } else { 0.0 };
-    let up_accuracy = if up_total > 0 { up_correct as f64 / up_total as f64 } else { 0.0 };
-    let down_accuracy = if down_total > 0 { down_correct as f64 / down_total as f64 } else { 0.0 };
+    let accuracy = if total > 0 {
+        correct as f64 / total as f64
+    } else {
+        0.0
+    };
+    let up_accuracy = if up_total > 0 {
+        up_correct as f64 / up_total as f64
+    } else {
+        0.0
+    };
+    let down_accuracy = if down_total > 0 {
+        down_correct as f64 / down_total as f64
+    } else {
+        0.0
+    };
 
     let mut equity_curve = vec![initial_capital];
     let mut equity = initial_capital;
@@ -60,7 +72,11 @@ pub fn evaluate(
         let variance =
             returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / (returns.len() - 1) as f64;
         let std_dev = variance.sqrt();
-        if std_dev > 0.0 { mean / std_dev * (252.0_f64).sqrt() } else { 0.0 }
+        if std_dev > 0.0 {
+            mean / std_dev * (252.0_f64).sqrt()
+        } else {
+            0.0
+        }
     } else {
         0.0
     };

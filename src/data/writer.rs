@@ -5,13 +5,8 @@ pub fn create_writer(path: &Path) -> csv::Result<Writer<std::fs::File>> {
     Writer::from_path(path)
 }
 
-pub fn write_header(
-    wtr: &mut Writer<std::fs::File>,
-    indicator_names: &[&str],
-) -> csv::Result<()> {
-    let mut header = vec![
-        "timestamp", "open", "high", "low", "close", "volume",
-    ];
+pub fn write_header(wtr: &mut Writer<std::fs::File>, indicator_names: &[&str]) -> csv::Result<()> {
+    let mut header = vec!["timestamp", "open", "high", "low", "close", "volume"];
     header.extend(indicator_names);
     wtr.write_record(&header)?;
     Ok(())

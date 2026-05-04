@@ -60,11 +60,7 @@ pub fn render_dashboard(
             Scatter::new(buy_x, buy_y)
                 .mode(Mode::Markers)
                 .name("Predict UP")
-                .marker(
-                    plotly::common::Marker::new()
-                        .size(10)
-                        .color("green"),
-                ),
+                .marker(plotly::common::Marker::new().size(10).color("green")),
         );
     }
 
@@ -79,11 +75,7 @@ pub fn render_dashboard(
             Scatter::new(sell_x, sell_y)
                 .mode(Mode::Markers)
                 .name("Predict DOWN")
-                .marker(
-                    plotly::common::Marker::new()
-                        .size(10)
-                        .color("red"),
-                ),
+                .marker(plotly::common::Marker::new().size(10).color("red")),
         );
     }
 

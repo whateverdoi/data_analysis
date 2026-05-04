@@ -1,17 +1,16 @@
 use fin_primitives::{
     ohlcv::OhlcvBar,
-    signals::SignalValue,
     signals::pipeline::SignalPipeline,
+    signals::SignalValue,
     types::{NanoTimestamp, Price, Quantity, Symbol},
     FinError,
 };
-use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
 use fin_primitives::signals::indicators::{
-    Atr, BollingerB, Cci, Ema, Macd, Mfi, Obv, Roc, Rsi, Sma, WilliamsR,
-    StochasticK,
+    Atr, BollingerB, Cci, Ema, Macd, Mfi, Obv, Roc, Rsi, Sma, StochasticK, WilliamsR,
 };
 
 pub struct IndicatorEngine {
@@ -40,11 +39,15 @@ impl IndicatorEngine {
             .add(Mfi::new("mfi14", 14).unwrap());
 
         let names = vec![
-            "sma20", "sma50", "ema12", "ema26", "rsi14", "macd", "stoch_k",
-            "willr14", "cci20", "roc10", "bb_sma", "atr14", "obv", "mfi14",
+            "sma20", "sma50", "ema12", "ema26", "rsi14", "macd", "stoch_k", "willr14", "cci20",
+            "roc10", "bb_sma", "atr14", "obv", "mfi14",
         ];
 
-        Ok(Self { pipeline, names, symbol })
+        Ok(Self {
+            pipeline,
+            names,
+            symbol,
+        })
     }
 
     pub fn indicator_names(&self) -> &[&'static str] {

@@ -44,8 +44,7 @@ fn draw_chart_inner(
     let vol_max = volumes.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
     let root =
-        SVGBackend::new(path.to_str().unwrap_or("chart.svg"), (1200, 800))
-            .into_drawing_area();
+        SVGBackend::new(path.to_str().unwrap_or("chart.svg"), (1200, 800)).into_drawing_area();
     root.fill(&RGBColor(24, 24, 27))?;
 
     let (upper, lower) = root.split_vertically(560);

@@ -1,2 +1,2 @@
-pub mod png;
 pub mod html;
+pub mod png;

@@ -28,14 +28,12 @@ impl CsvRow {
             return d.and_hms_opt(0, 0, 0);
         }
         if let Ok(secs) = s.parse::<i64>() {
-            return DateTime::from_timestamp(secs, 0)
-                .map(|dt| dt.naive_utc());
+            return DateTime::from_timestamp(secs, 0).map(|dt| dt.naive_utc());
         }
         if let Ok(millis) = s.parse::<i64>() {
             let secs = millis / 1000;
             let nsecs = ((millis % 1000) * 1_000_000) as u32;
-            return DateTime::from_timestamp(secs, nsecs)
-                .map(|dt| dt.naive_utc());
+            return DateTime::from_timestamp(secs, nsecs).map(|dt| dt.naive_utc());
         }
         None
     }

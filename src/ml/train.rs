@@ -1,6 +1,5 @@
 use smartcore::{
-    ensemble::random_forest_classifier::RandomForestClassifier,
-    linalg::basic::matrix::DenseMatrix,
+    ensemble::random_forest_classifier::RandomForestClassifier, linalg::basic::matrix::DenseMatrix,
 };
 use std::time::Instant;
 
@@ -10,11 +9,7 @@ pub struct TrainedModel {
     pub train_time_ms: u64,
 }
 
-pub fn train_random_forest(
-    features: &[Vec<f64>],
-    labels: &[i32],
-    _n_trees: u32,
-) -> TrainedModel {
+pub fn train_random_forest(features: &[Vec<f64>], labels: &[i32], _n_trees: u32) -> TrainedModel {
     assert!(
         features.len() == labels.len(),
         "特征和标签数量不匹配: features={}, labels={}",
@@ -30,12 +25,7 @@ pub fn train_random_forest(
 
     let x = DenseMatrix::from_2d_vec(&features_vec).expect("构建特征矩阵失败");
 
-    let model = RandomForestClassifier::fit(
-        &x,
-        &labels_vec,
-        Default::default(),
-    )
-    .expect("训练失败");
+    let model = RandomForestClassifier::fit(&x, &labels_vec, Default::default()).expect("训练失败");
 
     let predictions = model.predict(&x).expect("训练集预测失败");
     let correct = predictions
