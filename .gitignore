@@ -1,3 +1,5 @@
 /target
 *.csv
 .vscode
+output/model.onnx
+output/train_metrics.json

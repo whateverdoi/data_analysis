@@ -6,6 +6,11 @@ pub struct Config {
     pub csv_output: PathBuf,
     pub png_output: PathBuf,
     pub html_output: PathBuf,
+    pub train_features_output: PathBuf,
+    pub test_features_output: PathBuf,
+    pub model_output: PathBuf,
+    pub train_metrics_output: PathBuf,
+    pub python_bin: PathBuf,
     pub window_size: usize,
     pub train_split: f64,
     pub n_trees: u32,
@@ -21,6 +26,11 @@ impl Default for Config {
             csv_output: PathBuf::from("output/enhanced.csv"),
             png_output: PathBuf::from("output/chart.svg"),
             html_output: PathBuf::from("output/dashboard.html"),
+            train_features_output: PathBuf::from("output/train_features.csv"),
+            test_features_output: PathBuf::from("output/test_features.csv"),
+            model_output: PathBuf::from("output/model.onnx"),
+            train_metrics_output: PathBuf::from("output/train_metrics.json"),
+            python_bin: PathBuf::from("/home/lhh/Documents/lhhpythonprojects/.lhh/bin/python"),
             window_size: 60,
             train_split: 0.6,
             n_trees: 100,
@@ -38,6 +48,18 @@ impl Config {
             std::fs::create_dir_all(parent)?;
         }
         if let Some(parent) = self.html_output.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        if let Some(parent) = self.train_features_output.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        if let Some(parent) = self.test_features_output.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        if let Some(parent) = self.model_output.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        if let Some(parent) = self.train_metrics_output.parent() {
             std::fs::create_dir_all(parent)?;
         }
         Ok(())

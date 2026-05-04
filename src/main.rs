@@ -12,7 +12,7 @@ use features::builder::FeatureBuilder;
 use indicators::engine::IndicatorEngine;
 use ml::backtest::evaluate;
 use ml::predict::predict_batch;
-use ml::train::train_random_forest;
+use ml::train::{train_python_random_forest, write_feature_csv};
 use plotting::{html::render_dashboard, png::render_ohlcv};
 use std::io::Write;
 use std::path::PathBuf;
@@ -20,7 +20,8 @@ use std::path::PathBuf;
 fn main() {
     // 读取默认配置，并确保输出目录已经存在。
     let mut config = Config::default();
-    config.csv_input=PathBuf::from("/home/lhh/Documents/lhhrustprojects/bars/data/test_dollar_run.csv");
+    config.csv_input =
+        PathBuf::from("/home/lhh/Documents/lhhrustprojects/bars/data/test_dollar_run.csv");
     config.check_output_dirs().expect("无法创建输出目录");
 
     // 打印本次运行的核心参数，方便确认输入文件和模型配置。
@@ -158,16 +159,33 @@ fn main() {
     let test_features: Vec<Vec<f64>> = all_features[train_size..].to_vec();
     let test_labels: Vec<i32> = all_labels[train_size..].to_vec();
 
-    // 使用训练集训练随机森林分类模型。
+    write_feature_csv(
+        &config.train_features_output,
+        &train_features,
+        &train_labels,
+    )
+    .expect("写训练特征 CSV 失败");
+    write_feature_csv(&config.test_features_output, &test_features, &test_labels)
+        .expect("写测试特征 CSV 失败");
+
+    // 使用 Python 训练随机森林，并导出给 Rust 推理使用的 ONNX 模型。
     println!("\n=== 模型训练 ===");
-    let trained = train_random_forest(&train_features, &train_labels, config.n_trees);
+    let trained = train_python_random_forest(
+        &config.python_bin,
+        &config.train_features_output,
+        &config.model_output,
+        &config.train_metrics_output,
+        config.n_trees,
+    )
+    .expect("Python 模型训练失败");
     println!("训练集大小: {}", train_features.len());
     println!("训练准确率: {:.2}%", trained.train_accuracy * 100.0);
     println!("训练耗时: {}ms", trained.train_time_ms);
 
-    // 用测试集预测涨跌，并把预测结果放入简单回测中评估收益表现。
+    // Rust 加载 Python 导出的 ONNX 模型预测涨跌，并把预测结果放入简单回测中评估收益表现。
     println!("\n=== 回测预测 ===");
-    let predictions = predict_batch(&trained.model, &test_features, &test_labels);
+    let predictions =
+        predict_batch(&config.model_output, &test_features, &test_labels).expect("ONNX 推理失败");
     // 特征窗口会消耗前 window_size 条数据，所以回测价格需要做同样的偏移。
     let test_offset = train_size + config.window_size;
     let prices_for_backtest: Vec<f64> = all_closes[test_offset..].to_vec();
@@ -234,4 +252,5 @@ fn main() {
     println!("  CSV:  {}", config.csv_output.display());
     println!("  SVG:  {}", config.png_output.display());
     println!("  HTML: {}", config.html_output.display());
+    println!("  ONNX: {}", config.model_output.display());
 }
