@@ -13,6 +13,8 @@ pub struct BacktestMetrics {
     pub equity_curve: Vec<f64>,
 }
 
+/// 评估模型预测的回测性能
+/// prices 应该与 predictions 长度相同
 pub fn evaluate(
     predictions: &[Prediction],
     prices: &[f64],
@@ -54,6 +56,13 @@ pub fn evaluate(
 
     let mut equity_curve = vec![initial_capital];
     let mut equity = initial_capital;
+    
+    // 验证数据对齐
+    if predictions.len() != prices.len() {
+        eprintln!("警告: predictions数量({})与prices数量({})不匹配，这会导致回测结果不准确", 
+            predictions.len(), prices.len());
+    }
+    
     for (i, pred) in predictions.iter().enumerate() {
         if pred.predicted == 1 && i + 1 < prices.len() {
             let price_return = (prices[i + 1] - prices[i]) / prices[i];

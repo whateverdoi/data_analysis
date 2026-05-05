@@ -27,17 +27,42 @@ def main():
     model_output = Path(args.model_output)
     metrics_output = Path(args.metrics_output)
 
-    data = np.loadtxt(train_csv, delimiter=",", skiprows=1, dtype=np.float32)
-    if data.ndim == 1:
-        data = data.reshape(1, -1)
-    if data.shape[1] < 2:
-        raise ValueError("training CSV must contain at least one feature column and one label column")
-
-    x_train = data[:, :-1].astype(np.float32)
-    y_train = data[:, -1].astype(np.int64)
+    # 使用 pandas 加载以便灵活处理空值
+    try:
+        import pandas as pd
+        df = pd.read_csv(train_csv, dtype=np.float32)
+        print(f"[Python] 加载前: {len(df)} 行")
+        
+        # 二次清理：删除任何包含 NaN 的行（防线机制）
+        df = df.dropna()
+        print(f"[Python] 加载后删除空值: {len(df)} 行")
+        
+        if len(df) == 0:
+            raise ValueError("After dropna(), no data remaining in training CSV")
+        
+        x_train = df.iloc[:, :-1].values.astype(np.float32)
+        y_train = df.iloc[:, -1].values.astype(np.int64)
+    except ImportError:
+        # 如果没有 pandas，回退到 numpy
+        print("[Python] pandas 不可用，使用 numpy 加载")
+        data = np.loadtxt(train_csv, delimiter=",", skiprows=1, dtype=np.float32)
+        if data.ndim == 1:
+            data = data.reshape(1, -1)
+        if data.shape[1] < 2:
+            raise ValueError("training CSV must contain at least one feature column and one label column")
+        
+        x_train = data[:, :-1].astype(np.float32)
+        y_train = data[:, -1].astype(np.int64)
+    
     if x_train.shape[0] == 0:
         raise ValueError("training data is empty")
 
+    # 验证数据完整性
+    if np.isnan(x_train).any() or np.isnan(y_train).any():
+        raise ValueError("NaN 仍然存在于训练数据中，这表明 Rust 端的清洁出现问题")
+    
+    print(f"[Python] 训练数据: {x_train.shape[0]} 行 x {x_train.shape[1]} 列")
+    
     start = time.perf_counter()
     model = RandomForestClassifier(
         n_estimators=args.n_trees,

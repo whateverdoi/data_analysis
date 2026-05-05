@@ -30,10 +30,18 @@ pub fn write_row(
         format!("{}", close),
         format!("{}", volume),
     ];
-    for val in indicator_values {
+    for (idx, val) in indicator_values.iter().enumerate() {
         match val {
-            Some(v) => record.push(format!("{:.6}", v)),
-            None => record.push(String::new()),
+            Some(v) => {
+                // 检查是否为 NaN 或 Inf
+                if v.is_nan() || v.is_infinite() {
+                    eprintln!("警告: 指标 {} 包含 NaN 或 Inf 值: {}", idx, v);
+                    record.push(String::new());
+                } else {
+                    record.push(format!("{:.6}", v))
+                }
+            }
+            None => record.push(String::new()), // 指标计算期间的空值，在增强 CSV 中以空字符串表示
         }
     }
     wtr.write_record(&record)?;
