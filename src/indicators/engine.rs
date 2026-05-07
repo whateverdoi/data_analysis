@@ -15,33 +15,207 @@ use fin_primitives::signals::indicators::{
 
 pub struct IndicatorEngine {
     pipeline: SignalPipeline,
-    names: Vec<&'static str>,
+    names: Vec<String>,
     symbol: Symbol,
 }
 
-impl IndicatorEngine {
-    pub fn new(symbol_name: &str) -> Result<Self, FinError> {
-        let symbol = Symbol::new(symbol_name)?;
-        let pipeline = SignalPipeline::new()
-            .add(Sma::new("sma20", 20).unwrap())
-            .add(Sma::new("sma50", 50).unwrap())
-            .add(Ema::new("ema12", 12).unwrap())
-            .add(Ema::new("ema26", 26).unwrap())
-            .add(Rsi::new("rsi14", 14).unwrap())
-            .add(Macd::new("macd", 12, 26, 9).unwrap())
-            .add(StochasticK::new("stoch_k", 14).unwrap())
-            .add(WilliamsR::new("willr14", 14).unwrap())
-            .add(Cci::new("cci20", 20).unwrap())
-            .add(Roc::new("roc10", 10).unwrap())
-            .add(BollingerB::new("bb_sma", 20, dec!(2)).unwrap())
-            .add(Atr::new("atr14", 14).unwrap())
-            .add(Obv::new("obv"))
-            .add(Mfi::new("mfi14", 14).unwrap());
+#[derive(Debug, Clone)]
+pub enum IndicatorSpec {
+    Sma {
+        name: String,
+        period: usize,
+    },
+    Ema {
+        name: String,
+        period: usize,
+    },
+    Rsi {
+        name: String,
+        period: usize,
+    },
+    Macd {
+        name: String,
+        fast_period: usize,
+        slow_period: usize,
+        signal_period: usize,
+    },
+    StochasticK {
+        name: String,
+        period: usize,
+    },
+    WilliamsR {
+        name: String,
+        period: usize,
+    },
+    Cci {
+        name: String,
+        period: usize,
+    },
+    Roc {
+        name: String,
+        period: usize,
+    },
+    BollingerB {
+        name: String,
+        period: usize,
+        std_dev: Decimal,
+    },
+    Atr {
+        name: String,
+        period: usize,
+    },
+    Obv {
+        name: String,
+    },
+    Mfi {
+        name: String,
+        period: usize,
+    },
+}
 
-        let names = vec![
-            "sma20", "sma50", "ema12", "ema26", "rsi14", "macd", "stoch_k", "willr14", "cci20",
-            "roc10", "bb_sma", "atr14", "obv", "mfi14",
-        ];
+impl IndicatorSpec {
+    pub fn sma(name: impl Into<String>, period: usize) -> Self {
+        Self::Sma {
+            name: name.into(),
+            period,
+        }
+    }
+
+    pub fn ema(name: impl Into<String>, period: usize) -> Self {
+        Self::Ema {
+            name: name.into(),
+            period,
+        }
+    }
+
+    pub fn rsi(name: impl Into<String>, period: usize) -> Self {
+        Self::Rsi {
+            name: name.into(),
+            period,
+        }
+    }
+
+    pub fn macd(
+        name: impl Into<String>,
+        fast_period: usize,
+        slow_period: usize,
+        signal_period: usize,
+    ) -> Self {
+        Self::Macd {
+            name: name.into(),
+            fast_period,
+            slow_period,
+            signal_period,
+        }
+    }
+
+    pub fn stochastic_k(name: impl Into<String>, period: usize) -> Self {
+        Self::StochasticK {
+            name: name.into(),
+            period,
+        }
+    }
+
+    pub fn williams_r(name: impl Into<String>, period: usize) -> Self {
+        Self::WilliamsR {
+            name: name.into(),
+            period,
+        }
+    }
+
+    pub fn cci(name: impl Into<String>, period: usize) -> Self {
+        Self::Cci {
+            name: name.into(),
+            period,
+        }
+    }
+
+    pub fn roc(name: impl Into<String>, period: usize) -> Self {
+        Self::Roc {
+            name: name.into(),
+            period,
+        }
+    }
+
+    pub fn bollinger_b(name: impl Into<String>, period: usize, std_dev: Decimal) -> Self {
+        Self::BollingerB {
+            name: name.into(),
+            period,
+            std_dev,
+        }
+    }
+
+    pub fn atr(name: impl Into<String>, period: usize) -> Self {
+        Self::Atr {
+            name: name.into(),
+            period,
+        }
+    }
+
+    pub fn obv(name: impl Into<String>) -> Self {
+        Self::Obv { name: name.into() }
+    }
+
+    pub fn mfi(name: impl Into<String>, period: usize) -> Self {
+        Self::Mfi {
+            name: name.into(),
+            period,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Sma { name, .. }
+            | Self::Ema { name, .. }
+            | Self::Rsi { name, .. }
+            | Self::Macd { name, .. }
+            | Self::StochasticK { name, .. }
+            | Self::WilliamsR { name, .. }
+            | Self::Cci { name, .. }
+            | Self::Roc { name, .. }
+            | Self::BollingerB { name, .. }
+            | Self::Atr { name, .. }
+            | Self::Obv { name }
+            | Self::Mfi { name, .. } => name,
+        }
+    }
+}
+
+impl IndicatorEngine {
+    pub fn new(symbol_name: &str, specs: &[IndicatorSpec]) -> Result<Self, FinError> {
+        let symbol = Symbol::new(symbol_name)?;
+        let mut pipeline = SignalPipeline::new();
+        for spec in specs {
+            pipeline = match spec {
+                IndicatorSpec::Sma { name, period } => pipeline.add(Sma::new(name, *period)?),
+                IndicatorSpec::Ema { name, period } => pipeline.add(Ema::new(name, *period)?),
+                IndicatorSpec::Rsi { name, period } => pipeline.add(Rsi::new(name, *period)?),
+                IndicatorSpec::Macd {
+                    name,
+                    fast_period,
+                    slow_period,
+                    signal_period,
+                } => pipeline.add(Macd::new(name, *fast_period, *slow_period, *signal_period)?),
+                IndicatorSpec::StochasticK { name, period } => {
+                    pipeline.add(StochasticK::new(name, *period)?)
+                }
+                IndicatorSpec::WilliamsR { name, period } => {
+                    pipeline.add(WilliamsR::new(name, *period)?)
+                }
+                IndicatorSpec::Cci { name, period } => pipeline.add(Cci::new(name, *period)?),
+                IndicatorSpec::Roc { name, period } => pipeline.add(Roc::new(name, *period)?),
+                IndicatorSpec::BollingerB {
+                    name,
+                    period,
+                    std_dev,
+                } => pipeline.add(BollingerB::new(name, *period, *std_dev)?),
+                IndicatorSpec::Atr { name, period } => pipeline.add(Atr::new(name, *period)?),
+                IndicatorSpec::Obv { name } => pipeline.add(Obv::new(name)),
+                IndicatorSpec::Mfi { name, period } => pipeline.add(Mfi::new(name, *period)?),
+            };
+        }
+
+        let names = specs.iter().map(|spec| spec.name().to_string()).collect();
 
         Ok(Self {
             pipeline,
@@ -50,7 +224,7 @@ impl IndicatorEngine {
         })
     }
 
-    pub fn indicator_names(&self) -> &[&'static str] {
+    pub fn indicator_names(&self) -> &[String] {
         &self.names
     }
 
