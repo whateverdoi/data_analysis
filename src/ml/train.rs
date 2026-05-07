@@ -52,10 +52,12 @@ pub fn train_python_random_forest(
     model_output: &Path,
     metrics_output: &Path,
     n_trees: u32,
+    max_depth: Option<u32>,
+    min_samples_leaf: Option<u32>,
 ) -> Result<TrainingMetrics, Box<dyn Error>> {
     let script_path = train_script_path();
-    let output = Command::new(python_bin)
-        .arg(&script_path)
+    let mut cmd = Command::new(python_bin);
+    cmd.arg(&script_path)
         .arg("--train-csv")
         .arg(train_csv)
         .arg("--model-output")
@@ -63,8 +65,14 @@ pub fn train_python_random_forest(
         .arg("--metrics-output")
         .arg(metrics_output)
         .arg("--n-trees")
-        .arg(n_trees.to_string())
-        .output()
+        .arg(n_trees.to_string());
+    if let Some(d) = max_depth {
+        cmd.arg("--max-depth").arg(d.to_string());
+    }
+    if let Some(l) = min_samples_leaf {
+        cmd.arg("--min-samples-leaf").arg(l.to_string());
+    }
+    let output = cmd.output()
         .map_err(|err| {
             format!(
                 "启动 Python 训练失败: python={}, script={}, error={}",

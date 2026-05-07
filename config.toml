@@ -1,0 +1,135 @@
+[paths]
+csv_input = "/home/lhh/Documents/lhhrustprojects/bars/data/test_dollar_run.csv"
+
+[ml]
+python_bin = "/home/lhh/Documents/lhhpythonprojects/.lhh/bin/python"
+train_split = 0.6
+n_trees = 500
+max_depth = 10
+min_samples_leaf = 10
+
+[experiment]
+window_size = 20
+label_fn = "triple_barrier"
+
+[[experiment.indicators]]
+type = "sma"
+name = "sma20"
+period = 20
+
+[[experiment.indicators]]
+type = "sma"
+name = "sma50"
+period = 50
+
+[[experiment.indicators]]
+type = "ema"
+name = "ema12"
+period = 12
+
+[[experiment.indicators]]
+type = "ema"
+name = "ema26"
+period = 26
+
+[[experiment.indicators]]
+type = "rsi"
+name = "rsi14"
+period = 14
+
+[[experiment.indicators]]
+type = "macd"
+name = "macd"
+fast_period = 12
+slow_period = 26
+signal_period = 9
+
+[[experiment.indicators]]
+type = "stoch_k"
+name = "stoch_k"
+period = 14
+
+[[experiment.indicators]]
+type = "willr"
+name = "willr14"
+period = 14
+
+[[experiment.indicators]]
+type = "cci"
+name = "cci20"
+period = 20
+
+[[experiment.indicators]]
+type = "roc"
+name = "roc10"
+period = 10
+
+[[experiment.indicators]]
+type = "bb"
+name = "bb_sma"
+period = 20
+std_dev = 2.0
+
+[[experiment.indicators]]
+type = "atr"
+name = "atr14"
+period = 14
+
+[[experiment.indicators]]
+type = "obv"
+name = "obv"
+
+[[experiment.indicators]]
+type = "mfi"
+name = "mfi14"
+period = 14
+
+[[experiment.indicators]]
+type = "adx"
+name = "adx14"
+period = 14
+
+[[experiment.indicators]]
+type = "aroon"
+name = "aroon14"
+period = 14
+
+[[experiment.indicators]]
+type = "force"
+name = "force13"
+period = 13
+
+[[experiment.indicators]]
+type = "chaikin"
+name = "chaikin"
+fast_period = 3
+slow_period = 10
+
+[[experiment.indicators]]
+type = "vwap"
+name = "vwap"
+
+[[experiment.indicators]]
+type = "mom"
+name = "mom10"
+period = 10
+
+[[experiment.indicators]]
+type = "trix"
+name = "trix15"
+period = 15
+
+[[experiment.indicators]]
+type = "keltner"
+name = "keltner20"
+period = 20
+multiplier = 2.0
+
+[[experiment.indicators]]
+type = "wad"
+name = "wad"
+
+[[experiment.indicators]]
+type = "elder"
+name = "elder13"
+period = 13

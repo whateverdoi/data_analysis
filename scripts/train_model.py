@@ -18,6 +18,8 @@ def parse_args():
     parser.add_argument("--model-output", required=True)
     parser.add_argument("--metrics-output", required=True)
     parser.add_argument("--n-trees", required=True, type=int)
+    parser.add_argument("--max-depth", type=int, default=None)
+    parser.add_argument("--min-samples-leaf", type=int, default=None)
     return parser.parse_args()
 
 
@@ -64,11 +66,16 @@ def main():
     print(f"[Python] 训练数据: {x_train.shape[0]} 行 x {x_train.shape[1]} 列")
     
     start = time.perf_counter()
-    model = RandomForestClassifier(
+    rf_kwargs = dict(
         n_estimators=args.n_trees,
         n_jobs=-1,
         random_state=42,
     )
+    if args.max_depth is not None:
+        rf_kwargs["max_depth"] = args.max_depth
+    if args.min_samples_leaf is not None:
+        rf_kwargs["min_samples_leaf"] = args.min_samples_leaf
+    model = RandomForestClassifier(**rf_kwargs)
     model.fit(x_train, y_train)
     train_time_ms = int((time.perf_counter() - start) * 1000)
 

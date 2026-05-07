@@ -5,6 +5,23 @@ use plotly::{
 };
 use std::path::Path;
 
+fn find_indicator(
+    indicator_values: &[Vec<Option<f64>>],
+    indicator_names: &[String],
+    name: &str,
+) -> Vec<Option<f64>> {
+    indicator_names
+        .iter()
+        .position(|n| n == name)
+        .map(|idx| {
+            indicator_values
+                .iter()
+                .map(|vals| vals.get(idx).copied().flatten())
+                .collect()
+        })
+        .unwrap_or_else(|| vec![None; indicator_values.len()])
+}
+
 pub fn render_dashboard(
     path: &Path,
     _dates: &[String],
@@ -13,8 +30,8 @@ pub fn render_dashboard(
     _lows: &[f64],
     closes: &[f64],
     _volumes: &[f64],
-    sma20: &[Option<f64>],
-    sma50: &[Option<f64>],
+    indicator_values: &[Vec<Option<f64>>],
+    indicator_names: &[String],
     equity_curve: &[f64],
     predictions: &[(usize, i32)],
 ) {
@@ -27,6 +44,9 @@ pub fn render_dashboard(
         .name("Close");
 
     plot.add_trace(close_trace);
+
+    let sma20 = find_indicator(indicator_values, indicator_names, "sma20");
+    let sma50 = find_indicator(indicator_values, indicator_names, "sma50");
 
     if sma20.iter().any(|v| v.is_some()) {
         let sma: Vec<f64> = sma20.iter().map(|v| v.unwrap_or(f64::NAN)).collect();

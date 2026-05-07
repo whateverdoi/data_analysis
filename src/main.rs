@@ -1,73 +1,73 @@
 mod config;
 mod data;
+mod error;
 mod features;
 mod indicators;
+mod labels;
 mod ml;
 mod plotting;
 
 use config::Config;
+use data::market_data::MarketData;
 use data::reader::read_csv;
 use data::writer::{create_writer, write_header, write_row};
 use features::builder::{
     build_feature_dataset as build_feature_dataset_from_spec, ExperimentSpec, FeatureDataset,
-    LabelContext,
 };
-use indicators::engine::{IndicatorEngine, IndicatorSpec};
-use ml::backtest::{evaluate, BacktestMetrics};
+use indicators::engine::IndicatorEngine;
+use labels::label_by_name;
+use log::{info, warn};
+use ml::backtest::{evaluate, evaluate_triple_barrier, BacktestMetrics};
 use ml::predict::predict_batch;
 use ml::train::{train_python_random_forest, write_feature_csv};
 use plotting::{html::render_dashboard, png::render_ohlcv};
-use rust_decimal_macros::dec;
 use std::io::Write;
-use std::path::PathBuf;
-
-pub(crate) struct MarketData {
-    pub(crate) opens: Vec<f64>,
-    pub(crate) highs: Vec<f64>,
-    pub(crate) lows: Vec<f64>,
-    pub(crate) closes: Vec<f64>,
-    pub(crate) volumes: Vec<f64>,
-    pub(crate) timestamps: Vec<String>,
-    pub(crate) indicator_values: Vec<Vec<Option<f64>>>,
-}
-
-impl MarketData {
-    fn new() -> Self {
-        Self {
-            opens: Vec::new(),
-            highs: Vec::new(),
-            lows: Vec::new(),
-            closes: Vec::new(),
-            volumes: Vec::new(),
-            timestamps: Vec::new(),
-            indicator_values: Vec::new(),
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.closes.len()
-    }
-}
 
 fn main() {
-    let config = read_config();
-    let experiment = default_experiment();
+    let config = Config::load();
 
+    println!("=== 金融时间序列数据分析 ===");
+    println!("CSV 输入: {}", config.csv_input.display());
+    println!("训练比例: {:.0}%", config.train_split * 100.0);
+    println!("随机森林树数: {}", config.n_trees);
+    println!();
+    config.check_output_dirs().expect("无法创建输出目录");
+
+    // 获取实验配置
+    let (label_fn, prediction_to_signal) = label_by_name(&config.label_fn_name)
+        .expect("标签函数未找到");
+    let experiment = ExperimentSpec {
+        window_size: config.window_size,
+        indicators: config.indicator_specs.clone(),
+        label_fn,
+        prediction_to_signal,
+    };
+
+    // 初始化指标引擎
     let mut engine =
         IndicatorEngine::new(&config.symbol, &experiment.indicators).expect("创建指标引擎失败");
     let num_indicators = engine.num_indicators();
     let indicator_names = engine.indicator_names().to_vec();
 
+    // 打印启用的技术指标
     print_indicator_names(num_indicators, &indicator_names);
 
+    // 读取CSV + 计算指标 + 写入增强CSV
     let market_data = build_enhanced_csv(&config, &mut engine, &indicator_names);
+    
+    // 构建特征数据集
     let Some(mut feature_dataset) = build_feature_dataset(&market_data, &experiment) else {
         return;
     };
+    
+    // 切分训练/测试集
     let (train_features, _train_labels, test_features, test_labels, train_size) =
         split_and_write_features(&config, &mut feature_dataset);
 
+    // 训练模型
     train_model(&config, train_features.len());
+    
+    // 回测
     let (metrics, pred_signals) = run_backtest(
         &config,
         &market_data,
@@ -78,61 +78,11 @@ fn main() {
         experiment.prediction_to_signal,
     );
 
+    // 生成可视化
     render_outputs(&config, &market_data, &metrics, &pred_signals);
+    
+    // 输出汇总
     print_output_summary(&config);
-}
-
-fn default_experiment() -> ExperimentSpec {
-    ExperimentSpec {
-        window_size: 60,
-        indicators: vec![
-            IndicatorSpec::sma("sma20", 20),
-            IndicatorSpec::sma("sma50", 50),
-            IndicatorSpec::ema("ema12", 12),
-            IndicatorSpec::ema("ema26", 26),
-            IndicatorSpec::rsi("rsi14", 14),
-            IndicatorSpec::macd("macd", 12, 26, 9),
-            IndicatorSpec::stochastic_k("stoch_k", 14),
-            IndicatorSpec::williams_r("willr14", 14),
-            IndicatorSpec::cci("cci20", 20),
-            IndicatorSpec::roc("roc10", 10),
-            IndicatorSpec::bollinger_b("bb_sma", 20, dec!(2)),
-            IndicatorSpec::atr("atr14", 14),
-            IndicatorSpec::obv("obv"),
-            IndicatorSpec::mfi("mfi14", 14),
-        ],
-        label_fn: label_next_close_direction,
-        prediction_to_signal: default_prediction_to_signal,
-    }
-}
-
-fn label_next_close_direction(ctx: &LabelContext<'_>) -> Option<i32> {
-    let current = ctx.close(ctx.index)?;
-    let next = ctx.close(ctx.index + 1)?;
-    Some(if next > current { 1 } else { 0 })
-}
-
-#[allow(dead_code)]
-fn label_future_return_5(ctx: &LabelContext<'_>) -> Option<i32> {
-    let current = ctx.close(ctx.index)?;
-    let future = ctx.close(ctx.index + 5)?;
-    let ret = future / current - 1.0;
-
-    Some(if ret > 0.003 {
-        2
-    } else if ret < -0.003 {
-        0
-    } else {
-        1
-    })
-}
-
-fn default_prediction_to_signal(label: i32) -> i32 {
-    if label == 1 {
-        1
-    } else {
-        0
-    }
 }
 
 fn print_indicator_names(num_indicators: usize, indicator_names: &[String]) {
@@ -205,7 +155,7 @@ fn build_enhanced_csv(
                 }
             }
             Err(e) => {
-                eprintln!("读取 CSV 行失败, 跳过: {}", e);
+                warn!("读取 CSV 行失败, 跳过: {}", e);
             }
         }
     }
@@ -228,9 +178,9 @@ fn build_feature_dataset(
     experiment: &ExperimentSpec,
 ) -> Option<FeatureDataset> {
     // 把连续窗口内的指标序列转换成机器学习特征，并用实验规格生成标签。
-    println!("\n=== 特征工程 ===");
+    info!("特征工程");
     let Some((dataset, report)) = build_feature_dataset_from_spec(market_data, experiment) else {
-        eprintln!("特征数据不足，无法训练");
+        warn!("特征数据不足，无法训练");
         return None;
     };
 
@@ -290,18 +240,36 @@ fn split_and_write_features(
 
 fn train_model(config: &Config, train_feature_count: usize) {
     // 使用 Python 训练随机森林，并导出给 Rust 推理使用的 ONNX 模型。
-    println!("\n=== 模型训练 ===");
+    info!("模型训练");
     let trained = train_python_random_forest(
         &config.python_bin,
         &config.train_features_output,
         &config.model_output,
         &config.train_metrics_output,
         config.n_trees,
+        config.max_depth,
+        config.min_samples_leaf,
     )
     .expect("Python 模型训练失败");
     println!("训练集大小: {}", train_feature_count);
     println!("训练准确率: {:.2}%", trained.train_accuracy * 100.0);
     println!("训练耗时: {}ms", trained.train_time_ms);
+}
+
+fn align_test_indices(
+    dataset: &FeatureDataset,
+    train_size: usize,
+) -> Vec<usize> {
+    dataset
+        .feature_indices
+        .iter()
+        .skip(train_size)
+        .copied()
+        .collect()
+}
+
+fn is_triple_barrier(config: &Config) -> bool {
+    config.label_fn_name == "triple_barrier"
 }
 
 fn run_backtest(
@@ -313,53 +281,53 @@ fn run_backtest(
     train_size: usize,
     prediction_to_signal: fn(i32) -> i32,
 ) -> (BacktestMetrics, Vec<(usize, i32)>) {
-    // Rust 加载 Python 导出的 ONNX 模型预测标签，并把标签映射为交易信号后回测。
-    println!("\n=== 回测预测 ===");
+    info!("回测预测");
     let predictions =
         predict_batch(&config.model_output, test_features, test_labels).expect("ONNX 推理失败");
 
-    // 使用特征索引映射来确保回测的价格序列与预测结果精确对齐。
-    let test_feature_start = train_size;
-    let test_feature_indices: Vec<usize> = dataset
-        .feature_indices
-        .iter()
-        .skip(test_feature_start)
-        .copied()
-        .collect();
+    let test_indices = align_test_indices(dataset, train_size);
 
-    // 从原始价格序列中提取对应的价格
-    let prices_for_backtest: Vec<f64> = test_feature_indices
-        .iter()
-        .map(|&idx| market_data.closes[idx])
-        .collect();
-
-    let metrics = evaluate(
-        &predictions,
-        &prices_for_backtest,
-        100_000.0,
-        prediction_to_signal,
-    );
+    let metrics = if is_triple_barrier(config) {
+        evaluate_triple_barrier(
+            &predictions,
+            &test_indices,
+            &market_data.closes,
+            &market_data.highs,
+            &market_data.lows,
+            100_000.0,
+            prediction_to_signal,
+            14,
+            2.0,
+            2.0,
+            20,
+        )
+    } else {
+        let test_prices: Vec<f64> = test_indices
+            .iter()
+            .map(|&idx| market_data.closes[idx])
+            .collect();
+        evaluate(&predictions, &test_prices, 100_000.0, prediction_to_signal)
+    };
     println!("测试集预测数: {}", metrics.total_predictions);
     println!("回测准确率: {:.2}%", metrics.accuracy * 100.0);
-    println!("各 label 准确率:");
-    for (label, label_metrics) in &metrics.label_metrics {
+    println!("总收益率: {:.2}%", metrics.total_return_pct);
+    println!("总交易数: {}", metrics.total_trades);
+    println!("各 label 分析:");
+    for (label, lm) in &metrics.label_metrics {
         println!(
-            "  label {}: 样本 {}, 准确率 {:.2}%",
-            label,
-            label_metrics.total,
-            label_metrics.accuracy * 100.0
+            "  label {}: 样本 {} | 召回率 {:.2}% (真值={}时预测正确) | 精确率 {:.2}% (预测={}时实际正确)",
+            label, lm.total, lm.recall * 100.0, label, lm.precision * 100.0, label
         );
     }
     println!("夏普比率: {:.2}", metrics.sharpe_ratio);
     println!("最大回撤: {:.2}%", metrics.max_drawdown_pct);
 
-    // 把测试集预测映射回原始行情序列中的位置，方便在图上标出信号。
     let pred_signals: Vec<(usize, i32)> = predictions
         .iter()
         .enumerate()
         .map(|(i, p)| {
             (
-                test_feature_indices.get(i).copied().unwrap_or(0),
+                test_indices.get(i).copied().unwrap_or(0),
                 prediction_to_signal(p.predicted),
             )
         })
@@ -374,21 +342,8 @@ fn render_outputs(
     metrics: &BacktestMetrics,
     pred_signals: &[(usize, i32)],
 ) {
-    // 生成静态行情图和 HTML 仪表盘，便于可视化检查指标、价格和预测信号。
-    println!("\n=== 生成图表 ===");
+    info!("生成图表");
     let display_count = market_data.len().min(500);
-
-    // 这里默认取前两个指标作为 SMA20 和 SMA50，用于叠加到 K 线图上。
-    let sma20: Vec<Option<f64>> = market_data
-        .indicator_values
-        .iter()
-        .map(|vals| vals.first().copied().flatten())
-        .collect();
-    let sma50: Vec<Option<f64>> = market_data
-        .indicator_values
-        .iter()
-        .map(|vals| vals.get(1).copied().flatten())
-        .collect();
 
     let _png = render_ohlcv(
         &config.png_output,
@@ -398,8 +353,8 @@ fn render_outputs(
         &market_data.lows[..display_count],
         &market_data.closes[..display_count],
         &market_data.volumes[..display_count],
-        &sma20[..display_count],
-        &sma50[..display_count],
+        &market_data.indicator_values,
+        &config.indicator_names(),
     );
 
     let dashboard_signals: Vec<(usize, i32)> = pred_signals
@@ -409,7 +364,6 @@ fn render_outputs(
         .collect();
     let dashboard_equity_count = metrics.equity_curve.len().min(display_count);
 
-    // 渲染包含行情、均线、资金曲线和预测信号的 HTML 页面。
     render_dashboard(
         &config.html_output,
         &market_data.timestamps[..display_count],
@@ -418,8 +372,8 @@ fn render_outputs(
         &market_data.lows[..display_count],
         &market_data.closes[..display_count],
         &market_data.volumes[..display_count],
-        &sma20[..display_count],
-        &sma50[..display_count],
+        &market_data.indicator_values,
+        &config.indicator_names(),
         &metrics.equity_curve[..dashboard_equity_count],
         &dashboard_signals,
     );
@@ -435,18 +389,4 @@ fn print_output_summary(config: &Config) {
     println!("  ONNX: {}", config.model_output.display());
 }
 
-fn read_config() -> Config {
-    // 读取默认配置，并确保输出目录已经存在。
-    let mut config = Config::default();
-    config.csv_input =
-        PathBuf::from("/home/lhh/Documents/lhhrustprojects/bars/data/test_dollar_run.csv");
-    config.check_output_dirs().expect("无法创建输出目录");
 
-    // 打印本次运行的核心参数，方便确认输入文件和模型配置。
-    println!("=== 金融时间序列数据分析 ===");
-    println!("CSV 输入: {}", config.csv_input.display());
-    println!("训练比例: {:.0}%", config.train_split * 100.0);
-    println!("随机森林树数: {}", config.n_trees);
-    println!();
-    config
-}

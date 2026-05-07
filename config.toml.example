@@ -1,0 +1,57 @@
+[paths]
+csv_input = "data/input.csv"
+csv_output = "output/enhanced.csv"
+png_output = "output/chart.svg"
+html_output = "output/dashboard.html"
+train_features_output = "output/train_features.csv"
+test_features_output = "output/test_features.csv"
+model_output = "output/model.onnx"
+train_metrics_output = "output/train_metrics.json"
+
+[ml]
+python_bin = "python3"
+train_split = 0.6
+n_trees = 100
+symbol = "SYM"
+
+[experiment]
+window_size = 60
+label_fn = "next_close_direction"
+
+[[experiment.indicators]]
+type = "sma"
+name = "sma20"
+period = 20
+
+[[experiment.indicators]]
+type = "sma"
+name = "sma50"
+period = 50
+
+[[experiment.indicators]]
+type = "ema"
+name = "ema12"
+period = 12
+
+[[experiment.indicators]]
+type = "rsi"
+name = "rsi14"
+period = 14
+
+[[experiment.indicators]]
+type = "macd"
+name = "macd"
+fast_period = 12
+slow_period = 26
+signal_period = 9
+
+[[experiment.indicators]]
+type = "bb"
+name = "bb_sma"
+period = 20
+std_dev = 2.0
+
+[[experiment.indicators]]
+type = "atr"
+name = "atr14"
+period = 14

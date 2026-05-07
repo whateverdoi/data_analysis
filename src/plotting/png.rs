@@ -1,6 +1,23 @@
 use plotters::prelude::*;
 use std::path::Path;
 
+fn find_indicator<'a>(
+    indicator_values: &'a [Vec<Option<f64>>],
+    indicator_names: &[String],
+    name: &str,
+) -> Vec<Option<f64>> {
+    indicator_names
+        .iter()
+        .position(|n| n == name)
+        .map(|idx| {
+            indicator_values
+                .iter()
+                .map(|vals| vals.get(idx).copied().flatten())
+                .collect()
+        })
+        .unwrap_or_else(|| vec![None; indicator_values.len()])
+}
+
 pub fn render_ohlcv(
     path: &Path,
     _dates: &[String],
@@ -9,16 +26,19 @@ pub fn render_ohlcv(
     lows: &[f64],
     closes: &[f64],
     volumes: &[f64],
-    sma20: &[Option<f64>],
-    sma50: &[Option<f64>],
+    indicator_values: &[Vec<Option<f64>>],
+    indicator_names: &[String],
 ) {
     let n = closes.len();
     if n == 0 {
         return;
     }
 
+    let sma20 = find_indicator(indicator_values, indicator_names, "sma20");
+    let sma50 = find_indicator(indicator_values, indicator_names, "sma50");
+
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        draw_chart_inner(path, opens, highs, lows, closes, volumes, sma20, sma50, n)
+        draw_chart_inner(path, opens, highs, lows, closes, volumes, &sma20, &sma50, n)
     }));
 
     match result {

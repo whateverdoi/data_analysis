@@ -1,9 +1,11 @@
-use crate::indicators::engine::IndicatorSpec;
-use crate::MarketData;
+use crate::data::market_data::MarketData;
+use crate::indicators::specs::IndicatorSpec;
+#[allow(unused_imports)]
+use crate::indicators::specs::IndicatorKind;
+use crate::labels::label_fns::{LabelContext, LabelFn, PredictionToSignalFn};
 use std::collections::BTreeMap;
 
-pub type LabelFn = fn(&LabelContext<'_>) -> Option<i32>;
-pub type PredictionToSignalFn = fn(i32) -> i32;
+const NUM_AGG_STATS: usize = 9;
 
 #[derive(Clone)]
 pub struct ExperimentSpec {
@@ -11,51 +13,6 @@ pub struct ExperimentSpec {
     pub indicators: Vec<IndicatorSpec>,
     pub label_fn: LabelFn,
     pub prediction_to_signal: PredictionToSignalFn,
-}
-
-pub struct LabelContext<'a> {
-    pub index: usize,
-    market_data: &'a MarketData,
-}
-
-impl<'a> LabelContext<'a> {
-    pub fn new(index: usize, market_data: &'a MarketData) -> Self {
-        Self { index, market_data }
-    }
-
-    #[allow(dead_code)]
-    pub fn open(&self, index: usize) -> Option<f64> {
-        self.market_data.opens.get(index).copied()
-    }
-
-    #[allow(dead_code)]
-    pub fn high(&self, index: usize) -> Option<f64> {
-        self.market_data.highs.get(index).copied()
-    }
-
-    #[allow(dead_code)]
-    pub fn low(&self, index: usize) -> Option<f64> {
-        self.market_data.lows.get(index).copied()
-    }
-
-    pub fn close(&self, index: usize) -> Option<f64> {
-        self.market_data.closes.get(index).copied()
-    }
-
-    #[allow(dead_code)]
-    pub fn volume(&self, index: usize) -> Option<f64> {
-        self.market_data.volumes.get(index).copied()
-    }
-
-    #[allow(dead_code)]
-    pub fn indicator(&self, index: usize, indicator_index: usize) -> Option<f64> {
-        self.market_data
-            .indicator_values
-            .get(index)?
-            .get(indicator_index)
-            .copied()
-            .flatten()
-    }
 }
 
 pub struct FeatureDataset {
@@ -72,12 +29,57 @@ pub struct FeatureBuildReport {
     pub label_counts: BTreeMap<i32, usize>,
 }
 
+fn agg_stats(values: &[f64]) -> Vec<f64> {
+    let n = values.len() as f64;
+    let sum: f64 = values.iter().sum();
+    let mean = sum / n;
+    let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / n;
+    let std = variance.sqrt();
+
+    let last = *values.last().unwrap_or(&0.0);
+    let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let range = max - min;
+
+    let slope = if n > 1.0 {
+        let x_sum = (n - 1.0) * n / 2.0;
+        let x2_sum = (n - 1.0) * n * (2.0 * n - 1.0) / 6.0;
+        let xy_sum: f64 = values.iter().enumerate().map(|(i, &v)| i as f64 * v).sum();
+        (n * xy_sum - x_sum * sum) / (n * x2_sum - x_sum * x_sum)
+    } else {
+        0.0
+    };
+
+    let mut sorted: Vec<f64> = values.to_vec();
+    sorted.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let median = if sorted.is_empty() {
+        0.0
+    } else {
+        let mid = sorted.len() / 2;
+        if sorted.len() % 2 == 0 {
+            (sorted[mid - 1] + sorted[mid]) / 2.0
+        } else {
+            sorted[mid]
+        }
+    };
+
+    let skewness = if std > 0.0 {
+        let m3 = values.iter().map(|v| (v - mean).powi(3)).sum::<f64>() / n;
+        m3 / (std * std * std)
+    } else {
+        0.0
+    };
+
+    vec![last, mean, std, slope, min, max, median, range, skewness]
+}
+
 pub fn build_feature_dataset(
     market_data: &MarketData,
     spec: &ExperimentSpec,
 ) -> Option<(FeatureDataset, FeatureBuildReport)> {
-    let feature_count = spec.window_size * spec.indicators.len();
-    if spec.window_size == 0 || spec.indicators.is_empty() || market_data.len() < spec.window_size {
+    let num_indicators = spec.indicators.len();
+    let feature_count = num_indicators * NUM_AGG_STATS;
+    if spec.window_size == 0 || num_indicators == 0 || market_data.len() < spec.window_size {
         return None;
     }
 
@@ -96,17 +98,32 @@ pub fn build_feature_dataset(
         };
 
         let mut feature_vec = Vec::with_capacity(feature_count);
-        for bar_idx in (idx + 1 - spec.window_size)..=idx {
-            let row = &market_data.indicator_values[bar_idx];
-            feature_vec.extend(row.iter().map(|value| value.unwrap_or(0.0)));
+
+        for ind_idx in 0..num_indicators {
+            let mut raw = Vec::with_capacity(spec.window_size);
+            for bar_idx in (idx + 1 - spec.window_size)..=idx {
+                raw.push(
+                    market_data.indicator_values[bar_idx]
+                        .get(ind_idx)
+                        .copied()
+                        .flatten()
+                        .unwrap_or(0.0),
+                );
+            }
+            let has_nan = raw.iter().any(|v| v.is_nan());
+            if has_nan {
+                feature_vec.clear();
+                break;
+            }
+            feature_vec.extend(agg_stats(&raw));
         }
 
-        features_before_clean += 1;
-        if feature_vec.iter().any(|value| value.is_nan()) {
+        if feature_vec.is_empty() {
             rows_with_nan += 1;
             continue;
         }
 
+        features_before_clean += 1;
         features.push(feature_vec);
         labels.push(label);
         feature_indices.push(idx);
@@ -179,21 +196,33 @@ mod tests {
         assert_eq!(ctx.indicator(1, 99), None);
     }
 
+    fn agg_for(values: &[f64]) -> Vec<f64> {
+        agg_stats(values)
+    }
+
     #[test]
-    fn builds_windowed_features_and_indices() {
+    fn builds_aggregated_features() {
         let market_data = fixture_market_data();
         let spec = ExperimentSpec {
             window_size: 2,
-            indicators: vec![IndicatorSpec::sma("a", 2), IndicatorSpec::sma("b", 2)],
+            indicators: vec![
+                IndicatorSpec::new("a", IndicatorKind::Sma { period: 2 }),
+                IndicatorSpec::new("b", IndicatorKind::Sma { period: 2 }),
+            ],
             label_fn: label_next_close,
             prediction_to_signal: default_prediction_to_signal,
         };
 
         let (dataset, report) = build_feature_dataset(&market_data, &spec).unwrap();
 
-        assert_eq!(dataset.feature_count, 4);
+        assert_eq!(dataset.feature_count, 18);
         assert_eq!(dataset.features.len(), 2);
-        assert_eq!(dataset.features[0], vec![10.0, 20.0, 11.0, 21.0]);
+        // indicator A at idx=1: [10.0, 11.0]
+        let a_stats = agg_for(&[10.0, 11.0]);
+        // indicator B at idx=1: [20.0, 21.0]
+        let b_stats = agg_for(&[20.0, 21.0]);
+        let expected: Vec<f64> = a_stats.into_iter().chain(b_stats).collect();
+        assert_eq!(dataset.features[0], expected);
         assert_eq!(dataset.feature_indices, vec![1, 2]);
         assert_eq!(dataset.labels, vec![1, 1]);
         assert_eq!(report.skipped_by_label, 1);
@@ -205,7 +234,10 @@ mod tests {
         market_data.indicator_values[0][0] = Some(f64::NAN);
         let spec = ExperimentSpec {
             window_size: 2,
-            indicators: vec![IndicatorSpec::sma("a", 2), IndicatorSpec::sma("b", 2)],
+            indicators: vec![
+                IndicatorSpec::new("a", IndicatorKind::Sma { period: 2 }),
+                IndicatorSpec::new("b", IndicatorKind::Sma { period: 2 }),
+            ],
             label_fn: label_next_close,
             prediction_to_signal: default_prediction_to_signal,
         };
